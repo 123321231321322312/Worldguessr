@@ -1,0 +1,177 @@
+
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorldGuessr</title>
+<style>
+body {
+  margin: 0; font-family: 'Segoe UI', sans-serif; color: white;
+  background-color: #121212; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+#menu, #game, #results { width: 100%; height: 100%; display: none; flex-direction: column; align-items: center; justify-content: center; }
+button {
+  background: #1e88e5; border: none; color: white; padding: 12px 24px;
+  border-radius: 12px; margin: 8px; font-size: 1.1em;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+button:hover { background: #1565c0; }
+#languageToggle { position: absolute; top: 10px; right: 10px; background: #333; }
+#timer { position: absolute; top: 10px; left: 10px; font-size: 1.2em; }
+#map, #minimap { border-radius: 16px; overflow: hidden; }
+#map { width: 100%; height: 60%; }
+#minimap { width: 90%; height: 25%; margin-top: 10px; }
+#finishBtn { position: absolute; bottom: 20px; background: #e53935; }
+h1 { font-size: 2em; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+<div id="menu" style="display:flex;">
+  <h1 id="title">WorldGuessr 🌍</h1>
+  <button onclick="startGame('easy')" id="easyBtn">Fácil</button>
+  <button onclick="startGame('medium')" id="mediumBtn">Médio</button>
+  <button onclick="startGame('hard')" id="hardBtn">Difícil</button>
+  <button onclick="startGame('infinite')" id="infiniteBtn">Infinito</button>
+  <button onclick="startCustom()" id="customBtn">Personalizado</button>
+  <button id="languageToggle" onclick="toggleLang()">EN</button>
+</div>
+
+<div id="game">
+  <div id="timer">⏱️ 00:00</div>
+  <div id="map"></div>
+  <div id="minimap"></div>
+  <button id="finishBtn" onclick="finishRound()">Acabar</button>
+</div>
+
+<div id="results">
+  <h1 id="resultTitle">Resultados</h1>
+  <p id="scoreText"></p>
+  <button onclick="backToMenu()" id="backBtn">Menu Principal</button>
+</div>
+
+<script src="https://maps.googleapis.com/maps/api/js?key=1nOufJJa0nejHzAtziBjWdpglY8EXChj"></script>
+<script>
+let lang = 'pt';
+let texts = {
+  pt: {
+    title: 'WorldGuessr 🌍',
+    easy: 'Fácil',
+    medium: 'Médio',
+    hard: 'Difícil',
+    infinite: 'Infinito',
+    custom: 'Personalizado',
+    finish: 'Acabar',
+    results: 'Resultados',
+    back: 'Menu Principal'
+  },
+  en: {
+    title: 'WorldGuessr 🌍',
+    easy: 'Easy',
+    medium: 'Medium',
+    hard: 'Hard',
+    infinite: 'Endless',
+    custom: 'Custom',
+    finish: 'Finish',
+    results: 'Results',
+    back: 'Main Menu'
+  }
+};
+
+function toggleLang() {
+  lang = (lang === 'pt') ? 'en' : 'pt';
+  document.getElementById('languageToggle').innerText = lang === 'pt' ? 'EN' : 'PT';
+  applyLanguage();
+}
+
+function applyLanguage() {
+  let t = texts[lang];
+  document.getElementById('title').innerText = t.title;
+  document.getElementById('easyBtn').innerText = t.easy;
+  document.getElementById('mediumBtn').innerText = t.medium;
+  document.getElementById('hardBtn').innerText = t.hard;
+  document.getElementById('infiniteBtn').innerText = t.infinite;
+  document.getElementById('customBtn').innerText = t.custom;
+  document.getElementById('finishBtn').innerText = t.finish;
+  document.getElementById('resultTitle').innerText = t.results;
+  document.getElementById('backBtn').innerText = t.back;
+}
+
+let panorama, mapMini;
+let score = 0, round = 0, totalRounds = 15;
+let guessMarker = null, trueLoc = null;
+let gameTimer;
+
+function startGame(level) {
+  document.getElementById('menu').style.display = 'none';
+  document.getElementById('game').style.display = 'flex';
+  initMaps();
+  nextRound();
+}
+
+function initMaps() {
+  panorama = new google.maps.StreetViewPanorama(document.getElementById('map'), { pov: { heading: 165, pitch: 0 } });
+  mapMini = new google.maps.Map(document.getElementById('minimap'), { zoom: 2, center: { lat: 0, lng: 0 } });
+  mapMini.addListener('click', function(e) {
+    if (guessMarker) guessMarker.setMap(null);
+    guessMarker = new google.maps.Marker({ position: e.latLng, map: mapMini });
+  });
+}
+
+function nextRound() {
+  round++;
+  if (round > totalRounds) return endGame();
+  // Locais aleatórios não turísticos aproximados
+  const locations = [
+    {lat: 41.545, lng: -8.426}, {lat: 39.6, lng: -8.41}, {lat: 38.7, lng: -9.14}, {lat: -23.55, lng: -46.63},
+    {lat: 48.85, lng: 2.35}, {lat: 50.08, lng: 14.43}, {lat: 60.17, lng: 24.94}, {lat: 35.68, lng: 139.69},
+    {lat: 64.13, lng: -21.9}, {lat: -34.6, lng: -58.38}, {lat: 59.33, lng: 18.06}, {lat: 37.98, lng: 23.73}
+  ];
+  trueLoc = locations[Math.floor(Math.random() * locations.length)];
+  panorama.setPosition(trueLoc);
+  startTimer(60);
+}
+
+function startTimer(seconds) {
+  let timeLeft = seconds;
+  updateTimer(timeLeft);
+  clearInterval(gameTimer);
+  gameTimer = setInterval(() => {
+    timeLeft--;
+    updateTimer(timeLeft);
+    if (timeLeft <= 0) finishRound();
+  }, 1000);
+}
+
+function updateTimer(t) {
+  document.getElementById('timer').innerText = '⏱️ ' + t + 's';
+}
+
+function finishRound() {
+  clearInterval(gameTimer);
+  document.getElementById('game').style.display = 'none';
+  document.getElementById('results').style.display = 'flex';
+  let points = Math.floor(Math.random() * 1000);
+  score += points;
+  document.getElementById('scoreText').innerText = (lang === 'pt' ? 'Pontos ganhos: ' : 'Points earned: ') + points;
+  localStorage.setItem('lastScore', score);
+}
+
+function endGame() {
+  document.getElementById('game').style.display = 'none';
+  document.getElementById('results').style.display = 'flex';
+  document.getElementById('scoreText').innerText = (lang === 'pt' ? 'Pontuação final: ' : 'Final Score: ') + score;
+  localStorage.setItem('lastScore', score);
+}
+
+function backToMenu() {
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('menu').style.display = 'flex';
+  score = 0; round = 0;
+}
+
+applyLanguage();
+</script>
+</body>
+</html>
